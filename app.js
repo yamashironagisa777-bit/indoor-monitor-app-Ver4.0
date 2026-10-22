@@ -317,23 +317,24 @@
         }
       });
 
-      // 呼び出し確認・録音再生
-      if ($('ackCallAlert')) $('ackCallAlert').addEventListener('click', () => {
-        const card = $('callAlert');
-        callAlertAcknowledged = true;
-        if (card) { card.classList.remove('active'); card.classList.add('acknowledged'); }
-        if ($('callAlertTitle')) $('callAlertTitle').textContent = '呼び出しを確認済みにしました';
-        if ($('callAlertDetail')) $('callAlertDetail').textContent = 'この確認状態は現在の画面に表示しています。';
-        logEvent('呼び出し', '呼び出しを確認済みにした');
-      });
+      // 録音を再生できたら呼び出しを確認済みにする
       if ($('playCallAudio')) $('playCallAudio').addEventListener('click', async () => {
         const player = $('latestAudio');
         if (!player || !player.src) {
           if ($('audioStatus')) $('audioStatus').textContent = '呼び出し録音を取得中です。少し待ってから再生してください。';
           return;
         }
-        try { await player.play(); }
-        catch (error) {
+        try {
+          await player.play();
+          if (!callAlertAcknowledged) {
+            callAlertAcknowledged = true;
+            const card = $('callAlert');
+            if (card) { card.classList.remove('active'); card.classList.add('acknowledged'); }
+            if ($('callAlertTitle')) $('callAlertTitle').textContent = '呼び出しを確認済み';
+            if ($('callAlertDetail')) $('callAlertDetail').textContent = '録音を再生したため、この呼び出しは確認済みです。';
+            logEvent('呼び出し', '録音を再生して呼び出しを確認済みにした');
+          }
+        } catch (error) {
           if ($('audioStatus')) $('audioStatus').textContent = '再生できませんでした。再生ボタンを押してください。';
         }
       });
@@ -603,6 +604,12 @@
           if ($('callAlertTitle')) $('callAlertTitle').textContent = '呼び出しがあります';
           if ($('callAlertDetail')) $('callAlertDetail').textContent = '呼び出しボタンが押されました。録音を再生して状況を確認してください。';
           if ($('callAlertIcon')) $('callAlertIcon').textContent = '!';
+        } else if (callActive && callAlertAcknowledged) {
+          callCard.classList.remove('active');
+          callCard.classList.add('acknowledged');
+          if ($('callAlertTitle')) $('callAlertTitle').textContent = '呼び出しを確認済み';
+          if ($('callAlertDetail')) $('callAlertDetail').textContent = '録音を再生したため、この呼び出しは確認済みです。';
+          if ($('callAlertIcon')) $('callAlertIcon').textContent = '✓';
         } else if (!callActive) {
           callCard.classList.remove('active');
           callCard.classList.remove('acknowledged');
