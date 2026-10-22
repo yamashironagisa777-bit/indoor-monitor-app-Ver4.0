@@ -317,7 +317,7 @@
         }
       });
 
-      // 録音を再生できたら呼び出しを確認済みにする
+      // 録音を再生できたら、その呼び出しを確認済みにする。
       if ($('playCallAudio')) $('playCallAudio').addEventListener('click', async () => {
         const player = $('latestAudio');
         if (!player || !player.src) {
@@ -326,14 +326,12 @@
         }
         try {
           await player.play();
-          if (!callAlertAcknowledged) {
-            callAlertAcknowledged = true;
-            const card = $('callAlert');
-            if (card) { card.classList.remove('active'); card.classList.add('acknowledged'); }
-            if ($('callAlertTitle')) $('callAlertTitle').textContent = '呼び出しを確認済み';
-            if ($('callAlertDetail')) $('callAlertDetail').textContent = '録音を再生したため、この呼び出しは確認済みです。';
-            logEvent('呼び出し', '録音を再生して呼び出しを確認済みにした');
-          }
+          callAlertAcknowledged = true;
+          const card = $('callAlert');
+          if (card) { card.classList.remove('active'); card.classList.add('acknowledged'); }
+          if ($('callAlertTitle')) $('callAlertTitle').textContent = '呼び出しを確認済み';
+          if ($('callAlertDetail')) $('callAlertDetail').textContent = '録音を再生しました。新しい呼び出しが届くと再び通知します。';
+          logEvent('呼び出し', '録音を再生して確認済みにした');
         } catch (error) {
           if ($('audioStatus')) $('audioStatus').textContent = '再生できませんでした。再生ボタンを押してください。';
         }
@@ -437,6 +435,7 @@
 
     // 固定ファイル latest.wav の署名付きURLを取得し、音声データ自体もキャッシュせず読み込む
     let currentAudioObjectUrl = null;
+    let currentAudioHash = null;
 
     async function refreshLatestAudio() {
       if (audioLoading) return;
@@ -524,6 +523,29 @@
         const audioBlob = await audioRes.blob();
         if (!audioBlob.size) throw new Error('取得した録音データが空でした。');
 
+        // latest.wav が前回と異なる内容なら、新しい呼び出しとして確認状態を解除する。
+        const audioBytes = await audioBlob.arrayBuffer();
+        let audioHash;
+        if (window.crypto && window.crypto.subtle) {
+          const digest = await window.crypto.subtle.digest('SHA-256', audioBytes);
+          audioHash = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+        } else {
+          audioHash = `${audioBlob.size}:${audioBlob.type}:${audioBlob.lastModified || 0}`;
+        }
+        const isNewRecording = currentAudioHash !== null && audioHash !== currentAudioHash;
+        currentAudioHash = audioHash;
+        if (isNewRecording) {
+          callAlertAcknowledged = false;
+          if (previousCallActive) {
+            const card = $('callAlert');
+            if (card) { card.classList.add('active'); card.classList.remove('acknowledged'); }
+            if ($('callAlertTitle')) $('callAlertTitle').textContent = '呼び出しがあります';
+            if ($('callAlertDetail')) $('callAlertDetail').textContent = '新しい呼び出し録音が届きました。再生して確認してください。';
+            if ($('callAlertIcon')) $('callAlertIcon').textContent = '!';
+            logEvent('呼び出し', '新しい呼び出し録音を受信しました');
+          }
+        }
+
         const nextObjectUrl = URL.createObjectURL(audioBlob);
         const previousObjectUrl = currentAudioObjectUrl;
         player.src = nextObjectUrl;
@@ -604,12 +626,6 @@
           if ($('callAlertTitle')) $('callAlertTitle').textContent = '呼び出しがあります';
           if ($('callAlertDetail')) $('callAlertDetail').textContent = '呼び出しボタンが押されました。録音を再生して状況を確認してください。';
           if ($('callAlertIcon')) $('callAlertIcon').textContent = '!';
-        } else if (callActive && callAlertAcknowledged) {
-          callCard.classList.remove('active');
-          callCard.classList.add('acknowledged');
-          if ($('callAlertTitle')) $('callAlertTitle').textContent = '呼び出しを確認済み';
-          if ($('callAlertDetail')) $('callAlertDetail').textContent = '録音を再生したため、この呼び出しは確認済みです。';
-          if ($('callAlertIcon')) $('callAlertIcon').textContent = '✓';
         } else if (!callActive) {
           callCard.classList.remove('active');
           callCard.classList.remove('acknowledged');
