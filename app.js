@@ -326,7 +326,7 @@
       if ($('playCallAudio')) $('playCallAudio').addEventListener('click', async () => {
         const player = $('latestAudio');
         if (!player || !player.src) {
-          if ($('audioStatus')) $('audioStatus').textContent = '先に最新の録音を取得してください。';
+          if ($('audioStatus')) $('audioStatus').textContent = '呼び出し録音を取得中です。少し待ってから再生してください。';
           return;
         }
         try { await player.play(); }
@@ -431,15 +431,13 @@
       return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('ja-JP');
     }
 
-    // 固定ファイル latest.wav の署名付きURLを取得し、音声本体を毎回再取得する
+    // 固定ファイル latest.wav の署名付きURLを取得し、音声データ自体もキャッシュせず読み込む
     let currentAudioObjectUrl = null;
 
     async function refreshLatestAudio() {
       if (audioLoading) return;
 
       const player = $('latestAudio');
-      const status = $('audioStatus');
-      const fileName = $('audioFileName');
       if (!player) return;
 
       if (
@@ -448,12 +446,13 @@
         String(cfg.supabaseUrl).includes('YOUR_') ||
         String(cfg.supabaseAnonKey).includes('YOUR_')
       ) {
-        if (status) status.textContent = 'config.js にSupabase URLと公開可能キーを設定してください。';
+        console.warn('呼び出し録音の再生には config.js のSupabase設定が必要です。');
+        if ($('audioStatus')) $('audioStatus').textContent = 'Supabaseの設定を確認してください。';
         return;
       }
 
       audioLoading = true;
-      if (status) status.textContent = '最新の録音を確認しています…';
+      const status = $('audioStatus');
 
       try {
         const base = String(cfg.supabaseUrl).replace(/\/+$/, '');
@@ -480,10 +479,17 @@
 
         if (!signRes.ok) {
           const detail = await signRes.text();
-          throw new Error(
-            `録音の再生URLを取得できません (HTTP ${signRes.status})。` +
-            detail.slice(0, 250)
-          );
+          console.error('Supabase署名付きURL取得エラー', {
+            status: signRes.status,
+            response: detail
+          });
+          if (signRes.status === 404) {
+            throw new Error(`録音ファイルが見つかりません。${AUDIO_BUCKET}/${AUDIO_OBJECT} を確認してください。`);
+          }
+          if (signRes.status === 400 || signRes.status === 403) {
+            throw new Error(`録音へのアクセスに失敗しました (HTTP ${signRes.status})。Storageの権限設定を確認してください。`);
+          }
+          throw new Error(`再生URLを取得できません (HTTP ${signRes.status})。`);
         }
 
         const signed = await signRes.json();
@@ -501,42 +507,33 @@
           audioUrl = `${base}/storage/v1/${signedPath.replace(/^\/+/, '')}`;
         }
 
-        // URLだけでなく音声本体もキャッシュを避けて取得する。
-        // これにより同じ latest.wav が上書きされた場合も最新データを読み込める。
-        const audioRes = await fetch(audioUrl, { cache: 'no-store' });
+        // 署名付きURLだけでなく音声本体を取得し直す。cache:no-storeで古い録音の再利用を防ぐ。
+        const audioRes = await fetch(audioUrl, {
+          method: 'GET',
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        });
         if (!audioRes.ok) {
-          throw new Error(`録音ファイルを取得できません (HTTP ${audioRes.status})。`);
+          throw new Error(`録音データを取得できません (HTTP ${audioRes.status})。`);
         }
+
         const audioBlob = await audioRes.blob();
-        if (!audioBlob.size) {
-          throw new Error('録音ファイルが空です。');
-        }
+        if (!audioBlob.size) throw new Error('取得した録音データが空でした。');
 
-        const newObjectUrl = URL.createObjectURL(audioBlob);
-        const wasPlaying = !player.paused && !player.ended;
-
-        // 再生中はタイマー側で更新を避けるが、念のため再生中なら差し替えない。
-        if (wasPlaying) {
-          URL.revokeObjectURL(newObjectUrl);
-          if (status) status.textContent = '録音を再生中です。再生終了後に最新の録音を確認します。';
-          return;
-        }
-
-        player.pause();
-        player.src = newObjectUrl;
+        const nextObjectUrl = URL.createObjectURL(audioBlob);
+        const previousObjectUrl = currentAudioObjectUrl;
+        player.src = nextObjectUrl;
         player.dataset.signedAt = String(Date.now());
         player.load();
-
-        if (currentAudioObjectUrl) URL.revokeObjectURL(currentAudioObjectUrl);
-        currentAudioObjectUrl = newObjectUrl;
-
         player.hidden = true;
-        if (fileName) fileName.textContent = AUDIO_OBJECT;
-        if (status) status.textContent = `最新の録音を取得しました（${new Date().toLocaleTimeString('ja-JP')}）。再生ボタンで確認できます。`;
+        currentAudioObjectUrl = nextObjectUrl;
+
+        if (previousObjectUrl) URL.revokeObjectURL(previousObjectUrl);
+        if (status) status.textContent = `呼び出し録音を取得しました（${new Date().toLocaleTimeString('ja-JP')}）。`;
       } catch (e) {
-        console.error('Supabase録音取得エラー:', e);
-        if (status) status.textContent = `録音を更新できませんでした: ${e.message || e}。前回の録音があれば、そのまま再生できます。`;
-        // 更新失敗時は、既に取得済みの音声を消さない。
+        console.error('呼び出し録音を取得できません:', e.message || e);
+        // 取得失敗時も、以前に取得できた録音は消さずに残す
+        if (status) status.textContent = `録音を更新できませんでした。${e.message || '通信状態を確認してください。'}`;
       } finally {
         audioLoading = false;
       }
