@@ -60,9 +60,12 @@
     .event-time { color:#738391; white-space:nowrap; font-size:.78rem; }
     .event-tag { display:inline-block; border-radius:6px; padding:2px 6px; font-size:.72rem; font-weight:700; background:#eaf2ff; color:#2463a6; margin-right:5px; }
     .alert-actions { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; }
-    .call-alert { display:flex; align-items:center; gap:12px; padding:14px; border:1px solid #ffb4b0; border-radius:12px; background:#fff1f0; margin:14px 0; }
-    .call-alert .alert-icon { background:#dc2626; color:#fff; flex:0 0 34px; }
-    .call-alert p { margin:4px 0 0; font-size:.8rem; color:#7a4b4b; }
+    .call-alert { display:flex; align-items:center; gap:12px; padding:14px; border:1px solid #dce4ec; border-radius:12px; background:#f8fafc; margin:14px 0; }
+    .call-alert .alert-icon { background:#94a3b8; color:#fff; flex:0 0 34px; }
+    .call-alert p { margin:4px 0 0; font-size:.8rem; color:#52616c; }
+    .call-alert.active { border-color:#ffb4b0; background:#fff1f0; }
+    .call-alert.active .alert-icon { background:#dc2626; }
+    .call-alert.active p { color:#7a4b4b; }
     .call-alert.acknowledged { border-color:#dce4ec; background:#f8fafc; }
     .call-alert.acknowledged .alert-icon { background:#94a3b8; }
     .wake-status { padding:10px; background:#f2f8f5; border-radius:9px; color:#13795b; font-weight:700; margin-bottom:10px; }
