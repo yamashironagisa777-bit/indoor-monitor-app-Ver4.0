@@ -60,6 +60,8 @@
     const AUDIO_OBJECT = cfg.latestAudioPath || 'latest.wav';
 
     let audioLoading = false;
+    let callAlertAcknowledged = false;
+    let previousCallActive = false;
 
     // 自動運転の温度しきい値（現段階ではこのブラウザ内だけに保存）
     const TEMP_SETTINGS_KEY = 'indoorMonitorTemperatureSettings';
@@ -318,7 +320,8 @@
       // 呼び出し確認・録音再生
       if ($('ackCallAlert')) $('ackCallAlert').addEventListener('click', () => {
         const card = $('callAlert');
-        if (card) card.classList.add('acknowledged');
+        callAlertAcknowledged = true;
+        if (card) { card.classList.remove('active'); card.classList.add('acknowledged'); }
         if ($('callAlertTitle')) $('callAlertTitle').textContent = '呼び出しを確認済みにしました';
         if ($('callAlertDetail')) $('callAlertDetail').textContent = 'この確認状態は現在の画面に表示しています。';
         logEvent('呼び出し', '呼び出しを確認済みにした');
@@ -584,6 +587,32 @@
       if ($('gas')) $('gas').textContent = fmtNum(f.field3, 0);
       if ($('door')) $('door').textContent = statusText(f.field4, '開いています', '閉まっています');
       if ($('bed')) $('bed').textContent = statusText(f.field5, '在床あり', '在床なし');
+
+      // ThingSpeak field6 を呼び出し状態として扱う（1以上=呼び出し中）。
+      // 呼び出し中は赤色で表示し、確認済みにすると中立色に戻します。
+      const callActive = f.field6 !== undefined && f.field6 !== null && f.field6 !== '' && Number(f.field6) >= 1;
+      const callCard = $('callAlert');
+      if (callCard) {
+        if (callActive && !previousCallActive) {
+          callAlertAcknowledged = false;
+          logEvent('呼び出し', '呼び出しを受信しました');
+        }
+        if (callActive && !callAlertAcknowledged) {
+          callCard.classList.add('active');
+          callCard.classList.remove('acknowledged');
+          if ($('callAlertTitle')) $('callAlertTitle').textContent = '呼び出しがあります';
+          if ($('callAlertDetail')) $('callAlertDetail').textContent = '呼び出しボタンが押されました。録音を再生して状況を確認してください。';
+          if ($('callAlertIcon')) $('callAlertIcon').textContent = '!';
+        } else if (!callActive) {
+          callCard.classList.remove('active');
+          callCard.classList.remove('acknowledged');
+          callAlertAcknowledged = false;
+          if ($('callAlertTitle')) $('callAlertTitle').textContent = '呼び出しはありません';
+          if ($('callAlertDetail')) $('callAlertDetail').textContent = '呼び出しボタンの通知状態を表示します。';
+          if ($('callAlertIcon')) $('callAlertIcon').textContent = '!';
+        }
+        previousCallActive = callActive;
+      }
 
       if (f.created_at) {
         const d = new Date(f.created_at);
